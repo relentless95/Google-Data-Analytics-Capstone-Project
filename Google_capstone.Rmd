@@ -9,15 +9,15 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-```{r}
-setwd("C:/Users/marco/Desktop/coursera/Google data analytics course/capstone_project/2021_06_2022_05_divvy-tripdata")
+```{r, include=FALSE}
+setwd("C:/Users/marco/Desktop/coursera/Google data analytics course/capstone_project/2021_01_2022_05_divvy-tripdata")
 
 ```
 
 ## installing packages
 
 ## this package is already installed, hence it is commented out
-```{r}
+```{r, include = False}
 # install.packages("RSQLite")
 ```
 
@@ -35,18 +35,19 @@ library(writexl)
 ## loading 12 month worth of data on cyclistic data trips
 
 ```{r}
-df1<-read.csv("202106-divvy-tripdata.csv")
-df2<-read.csv("202107-divvy-tripdata.csv")
-df3<-read.csv("202108-divvy-tripdata.csv")
-df4<-read.csv("202109-divvy-tripdata.csv")
-df5<-read.csv("202110-divvy-tripdata.csv")
-df6<-read.csv("202111-divvy-tripdata.csv")
-df7<-read.csv("202112-divvy-tripdata.csv")
-df8<-read.csv("202201-divvy-tripdata.csv")
-df9<-read.csv("202202-divvy-tripdata.csv")
-df10<-read.csv("202203-divvy-tripdata.csv")
-df11<-read.csv("202204-divvy-tripdata.csv")
-df12<-read.csv("202205-divvy-tripdata.csv")
+
+df1<-read.csv("202101-divvy-tripdata.csv")
+df2<-read.csv("202102-divvy-tripdata.csv")
+df3<-read.csv("202203-divvy-tripdata.csv")
+df4<-read.csv("202204-divvy-tripdata.csv")
+df5<-read.csv("202205-divvy-tripdata.csv")
+df6<-read.csv("202106-divvy-tripdata.csv")
+df7<-read.csv("202107-divvy-tripdata.csv")
+df8<-read.csv("202108-divvy-tripdata.csv")
+df9<-read.csv("202109-divvy-tripdata.csv")
+df10<-read.csv("202110-divvy-tripdata.csv")
+df11<-read.csv("202111-divvy-tripdata.csv")
+df12<-read.csv("202112-divvy-tripdata.csv")
 
 ```
 
@@ -66,7 +67,7 @@ str(df11)
 str(df12)
 ```
 
-## by checking the structure it is clear all the loaded csv filles have 13 variables and differ in length. It is there fore possible to combine/merge them all together. For this,there are a number of ways we could use bind_rows() or rbind(). here i use bind_rows from the tidyverse package
+## by checking the structure it is clear all the loaded csv filles have 13 variables and differ in length. It is therefore possible to combine/merge them all together. For this,there are a number of ways we could use bind_rows() or rbind(). here i use bind_rows from the tidyverse package
 ```{r}
 cyclic_data<-bind_rows(df1,df2,df3,df4,df5,df6,df7,df8,df9,df10,df11,df12)
 
