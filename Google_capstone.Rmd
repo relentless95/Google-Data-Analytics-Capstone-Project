@@ -1,0 +1,476 @@
+---
+title: "Google Data Analytics Capstone project"
+author: "Marc Tagne"
+date: '2022-07-05'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r, include=FALSE}
+
+
+```
+
+## installing packages
+
+## this package is already installed, hence it is commented out
+```{r}
+# install.packages("RSQLite")
+```
+
+
+
+## loading necessary packages
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(RSQLite)
+library(writexl)
+```
+
+## loading 12 month worth of data on cyclistic data trips
+
+```{r}
+df1<-read.csv("202101-divvy-tripdata.csv")
+df2<-read.csv("202102-divvy-tripdata.csv")
+df3<-read.csv("202203-divvy-tripdata.csv")
+df4<-read.csv("202204-divvy-tripdata.csv")
+df5<-read.csv("202205-divvy-tripdata.csv")
+df6<-read.csv("202106-divvy-tripdata.csv")
+df7<-read.csv("202107-divvy-tripdata.csv")
+df8<-read.csv("202108-divvy-tripdata.csv")
+df9<-read.csv("202109-divvy-tripdata.csv")
+df10<-read.csv("202110-divvy-tripdata.csv")
+df11<-read.csv("202111-divvy-tripdata.csv")
+df12<-read.csv("202112-divvy-tripdata.csv")
+
+```
+
+## checking the structure of the files loaded
+```{r}
+str(df1)
+str(df2)
+str(df3)
+str(df4)
+str(df5)
+str(df6)
+str(df7)
+str(df8)
+str(df9)
+str(df10)
+str(df11)
+str(df12)
+```
+
+## by checking the structure it is clear all the loaded csv filles have 13 variables and differ in length. It is therefore possible to combine/merge them all together. For this,there are a number of ways we could use bind_rows() or rbind(). here i use bind_rows from the tidyverse package
+```{r}
+cyclic_data<-bind_rows(df1,df2,df3,df4,df5,df6,df7,df8,df9,df10,df11,df12)
+
+# now i removed the loaded dataframes because of memory issues
+rm(df1,df2,df3,df4,df5,df6,df7,df8,df9,df10,df11,df12)
+
+# removing empty columns  and rows
+
+cyclic_data<- janitor::remove_empty(cyclic_data,which = c("cols"))
+cyclic_data<- janitor::remove_empty(cyclic_data, which = c("rows"))
+
+
+```
+
+## now checking the cyclic_data
+```{r}
+head(cyclic_data)
+
+str(cyclic_data)
+
+colnames(cyclic_data)
+```
+
+## from the data it can be observed that the columns start_at and end_at  are character types and formated as date time.this should be corrected. 
+```{r, results='hide'}
+# preparing the data for analysis
+cyclic_data2<-cyclic_data
+
+# converting dates and time into POSIXct characters. For references about POSIxct see https://www.neonscience.org/resources/learning-hub/tutorials/dc-convert-date-time-posix-r
+
+cyclic_data2$started_at<-as.POSIXct(cyclic_data2$started_at, format ="%Y-%m-%d %H:%M:%S",tz="GMT")
+
+cyclic_data2$ended_at<-as.POSIXct(cyclic_data2$ended_at, format ="%Y-%m-%d %H:%M:%S", tz="GMT")
+
+#checking for na values in the data set
+apply(is.na(cyclic_data2),2,which)
+
+# I can see that there are a few na values observed especially for end_late and end_lng e.g.:
+
+# e.g this row
+(cyclic_data[689519,])
+
+
+# formating as dates
+cyclic_data2$date<-as.Date(cyclic_data2$started_at)
+cyclic_data2$month <-format(as.Date(cyclic_data2$date), "%b")
+
+cyclic_data2$day <-format(as.Date(cyclic_data2$date), "%d")
+cyclic_data2$year <-format(as.Date(cyclic_data2$date), "%Y")
+cyclic_data2$day_of_week <-weekdays(cyclic_data2$date)
+
+# this is not needed but i want to represent weekdays into numbers in another column with 1 representing monday and so on. t
+
+cyclic_data2<- cyclic_data2 %>% mutate(day_of_week_2 = case_when(
+  grepl("Monday", day_of_week) ~ 1,
+  grepl("Tuesday", day_of_week) ~ 2,
+  grepl("Wednesday", day_of_week) ~ 3,
+  grepl("Thursday", day_of_week) ~ 4,
+  grepl("Friday", day_of_week) ~ 5,
+  grepl("Saturday", day_of_week) ~ 6,
+  grepl("Sunday", day_of_week) ~ 7))
+
+
+```
+
+## basic data cleaning 
+
+## should have been done before
+```{r,results='hide'}
+
+# basic cleaning cyclic data
+head(cyclic_data2)
+
+#removing cyclic_data due to memory issues
+rm(cyclic_data)
+
+# checking that the columns rideable_type and member_casual contain the appropriate information. member_casual should contain either member or casual and rideable_type contains either docked_bike, electric_bike or classic_bike
+
+unique(cyclic_data2$rideable_type)
+
+unique(cyclic_data2$member_casual)
+
+# we are now sure we have the appropriate information in both columns
+
+# checking for na values
+apply(is.na(cyclic_data2), 2, which) # here we see that the column end_lat, end_lng have a lot of na values.
+
+# we will drop the na values using the drop_na() function as this will become a problem later on if we don't remove them
+
+cyclic_data3<-drop_na(cyclic_data2)
+
+#removing cyclic_data2 due to memory issues
+rm(cyclic_data2)
+
+## adding the columns start_hour and end_hour with the help of lubridate package function "hour"
+
+cyclic_data3$start_hour<-lubridate::hour(cyclic_data3$started_at)
+cyclic_data3$end_hour<-lubridate::hour(cyclic_data3$ended_at)
+
+# calculating the time spent riding bikes (ride_length) i.e the difference in time between started_at and ended_at. 
+
+cyclic_data3$ride_length_minutes<-difftime(cyclic_data3$ended_at,cyclic_data3$started_at, units = "mins") # ridelength in minutes
+
+#checking for NA values. i only expect NA values in end_lat and end_lng columns
+apply(is.na(cyclic_data3),2,which)
+
+
+# droping minutes values that are less than or equal to zero (<=0). we will only work with values greater than zero in the ride_length_minutes column
+
+cyclic_data4<-cyclic_data3 %>% filter(ride_length_minutes>0) %>% drop_na()
+
+#we remove cyclic_data3 now
+rm(cyclic_data3)
+
+
+```
+
+# before ploting the graphs a few things need to be adjusted 
+```{r}
+unique(cyclic_data4$day_of_week)
+unique(cyclic_data4$month)
+cyclic_data4$day_of_week <- factor(cyclic_data4$day_of_week, levels = c("Monday","Tuesday", "Wednesday", "Thursday", "Friday","Saturday","Sunday") )
+cyclic_data4$month<-factor(cyclic_data4$month, levels = c("Jan","Feb", "Mar","Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+
+cyclic_data4$ride_length_minutes<-as.numeric(cyclic_data4$ride_length_minutes)
+
+# removing stations_names_with blank
+cyclic_data4<-cyclic_data4 %>%filter(start_station_name != "")
+
+
+# will save this for safety purposes
+# write_csv(cyclic_data4,"./cyclic_data4.csv")
+```
+
+## Creating summary data frame and plots
+
+## finding the percentage of casual riders and members in the dataset
+```{r}
+percen_member_casual<-cyclic_data4 %>% group_by(member_casual) %>% summarise(count=length(ride_id), percentage = (length(ride_id)/nrow(cyclic_data4)) * 100)
+
+print(percen_member_casual)
+
+# we can see that there are more members(56.3%) than casual riders(43.7%)
+
+# representing with pie chart 
+ggplot(percen_member_casual,aes(x = "", y = percentage, fill = member_casual))+geom_bar(stat ="identity", width = 1) + coord_polar("y", start = 0)+ guides(fill =guide_legend(title = "membership") )+theme_void() + labs(title = "Membership percentage")
+```
+## Finding the most rides per weekdays
+```{r}
+#most most rides per week
+most_rides_week<-cyclic_data4 %>%
+  group_by(day_of_week) %>%
+  summarise(average_ride_length = mean(ride_length_minutes),
+            number_of_rides = n())
+
+ggplot(most_rides_week, aes(x = day_of_week, y=number_of_rides))+geom_col( color = "blue", fill = "blue")+theme_bw() + labs(title = "Number of rides per week", x = "\n Weekday", y = "Number of rides \n")
+
+# graph shows that the most rides per week are on weekends(saturdays and sundays)
+```
+
+## Determining the number of rides by membership per week
+```{r}
+# determining the ride length by membership per week
+ride_length_per_membership<-cyclic_data4 %>%
+  group_by(member_casual,day_of_week) %>%
+  summarise(average_ride_length = mean(ride_length_minutes),
+            number_of_rides = n())
+
+# representing with the number of rides per week days
+ggplot(ride_length_per_membership,aes(x = day_of_week, y=number_of_rides, fill = member_casual))+geom_col(position = "dodge")+labs(title="Number of rides per weekdays per membership", x = "\n Weekday", y = "Number of rides\n")+theme_bw()+
+  theme(axis.text.x = element_text(angle = 45),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"))
+
+# the graph clearly shows that we have more casual members on weekend
+
+```
+
+## representing the average ride length in minutes per week days
+```{r}
+
+ggplot(ride_length_per_membership,aes(x = day_of_week, y= average_ride_length, fill = member_casual))+geom_col(position = "dodge")+labs(title="Ride length in minutes per weekdays by membership", x = "\n Weekday", y = "ride length in minutes\n")+theme_bw()+
+  theme(axis.text.x = element_text(angle = 45),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"))
+
+#the graph shows that the average ridelength per week for casual riders is higher than that of members 
+
+```
+## determing the number of rides per month
+```{r}
+#ride length per month
+ride_length_per_month_only<-cyclic_data4 %>%
+  group_by(month) %>%
+  summarise(average_ride_length = mean(ride_length_minutes),
+            tot_ride_length = sum(ride_length_minutes),
+            number_of_rides = n())
+
+# representing the number of rides per month
+ggplot(ride_length_per_month_only,aes(x = month, y = number_of_rides ))+geom_col(position="dodge",color = "darkred", fill = "red")+ labs(title = "Number of rides per month", x ="\n Months", y = "Number of rides \n") +guides(fill =guide_legend(title = "Membership"))+theme_bw()
+
+# the graph shows that the months of June to september have the highest number of rides
+
+
+```
+## ride length per membership per month
+```{r}
+
+ride_length_per_month<-cyclic_data4 %>%
+  group_by(member_casual,month) %>%
+  summarise(average_ride_length = mean(ride_length_minutes),
+            tot_ride_length = sum(ride_length_minutes),
+            number_of_rides = n())
+
+# representing the number of rides per membership per month
+ggplot(ride_length_per_month,aes(x = month, y = number_of_rides, fill = member_casual))+geom_col(position="dodge")+ labs(title = "Number of rides per month by membership", x ="\n Months", y = "Number of rides \n") +guides(fill =guide_legend(title = "Membership"))
+
+# representing the average ride length per membership per month
+ggplot(ride_length_per_month,aes(x = month, y = average_ride_length, fill = member_casual))+geom_col(position="dodge")+ labs(title = "Averge ride lengths in minutes per month by membership", x ="\n Months", y = "Average ride length in minutes \n") +guides(fill =guide_legend(title = "Membership"))+ theme_bw()
+
+# representing the total ride length per month
+ggplot(ride_length_per_month,aes(x = month, y = tot_ride_length, fill = member_casual))+geom_col(position="dodge")+ labs(title = "total ride lengths in minutes per month by membership", x ="\n Months", y = "Total ride length in minutes \n") +guides(fill =guide_legend(title = "Membership")) 
+
+# The first graph shows something surprising, casual riders have the highest number of rides from of june to august
+# The second graphs shows that casual riders have the highest average riding time per month throughout the year i.e have more riding time
+# The third graph shows that the number of casual riders have the highest total riding time from march to august
+
+
+```
+# Finding the number of rides per starting hours each week per membership. This will help identify at what time riders are the most active
+```{r}
+# finding the number of rides by starting hours by week per membership
+bike_rides_week_hours<-cyclic_data4 %>% group_by(day_of_week,start_hour,member_casual) %>%
+  summarise(
+    Minutes_total = sum(ride_length_minutes),
+    Average = mean(ride_length_minutes),
+    number_of_rides = n()
+  ) %>% ungroup()
+
+# representing the number of rides by hours
+ggplot(bike_rides_week_hours, aes(x = start_hour, y =number_of_rides, fill = member_casual))+geom_col() + labs(title = "Number of rides by hours per week", x ="\n Hours", y="Number of rides\n" )+ guides(fill =guide_legend(title = "Membership"))
+
+# representing the Number of rides by hours for each day of the week by membership
+ggplot(bike_rides_week_hours, aes(x = start_hour, y =number_of_rides, fill = member_casual))+geom_col() + labs(title = "Number of rides by hours per week", x ="\n Hours", y="Number of rides\n" )+facet_wrap(~day_of_week)+guides(fill =guide_legend(title = "Membership"))
+
+# First graph shows that riders are most active between 12pm and 8pm for both casual and active riders
+# The second graph shows clear differences in pattern between weekdays and weekends. interesting! on weekends there is more activity between 9 am and 8pm. WHy? this requires more investigation.
+
+```
+
+# Finding the number of rides by starting hours by month per memberships
+```{r}
+# number of rides by starting hours by month per membership
+bike_rides_month_hours<-cyclic_data4 %>% group_by(month,start_hour,member_casual) %>%
+  summarise(
+    Minutes_total = sum(ride_length_minutes),
+    Average = mean(ride_length_minutes),
+    number_of_rides = n()
+  ) %>% ungroup()
+
+# representing the Number of rides by hours per month by membership
+ggplot(bike_rides_month_hours, aes(x = start_hour, y =number_of_rides, fill = member_casual))+geom_col() + labs(title = "Number of rides by hours per month", x ="\n Hours", y="Number of rides\n" )+facet_wrap(~month)+guides(fill =guide_legend(title = "Membership"))
+
+```
+
+# Finding the most popular bike types per weekday for each membership type
+```{r}
+# Finding the most popular bike types per week for each membership
+bike_type_week<-cyclic_data4 %>% group_by(day_of_week,rideable_type,member_casual) %>%
+  summarise(
+    Minutes_total = sum(ride_length_minutes),
+    Mean = mean(ride_length_minutes),
+    number_of_rides = n()
+  ) %>% ungroup()
+
+# representing the most popular bike types per week for each memberships
+ggplot(bike_type_week,aes(x = day_of_week,y= number_of_rides, fill = member_casual)) + geom_col()+facet_wrap(~rideable_type)+labs(title ="Most popular types of bikes per membership per week", x = "\n Week days", y = "Number of rides\n")+guides(fill =guide_legend(title = "Membership"))+
+  theme(axis.text.x = element_text(angle = 45),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"))
+
+# the data shows clearly that docked_bike types are the least favorite bike types while the most favorite one is classic bike follwed by electric bike. 
+
+```
+
+# Finding the most popular bike types per memberships
+```{r}
+# Finding the most popular bike types per memberships
+bike_type<-cyclic_data4 %>% group_by(rideable_type,member_casual) %>%
+  summarise(
+    Minutes_total = sum(ride_length_minutes),
+    average_ride_time = mean(ride_length_minutes),
+    number_of_rides = n()
+  ) %>% ungroup()
+
+# representing the most popular bike types per memberships
+ggplot(bike_type, aes(x=rideable_type, y =number_of_rides, fill=member_casual,))+geom_col(position = "dodge")+labs(title = "most popular bike types per memberships", x = "\n bike types", y = "Number of rides\n" )+guides(fill =guide_legend(title = "Membership"))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 0),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"))
+```
+
+#Finding out who rides more on days of the week and weekend for each membership type
+```{r}
+# finding out who rides more on days of the week and weekend by memberships
+more<-cyclic_data4 %>% group_by(member_casual,day_of_week) %>% 
+  summarise(
+    average_ride_length = mean(ride_length_minutes),
+    number_of_rides = n()
+  ) %>% ungroup()
+
+more<-more %>% mutate(type_of_week = ifelse(day_of_week == "Saturday"| day_of_week == "Sunday", "Weekend", "Midweek"))
+
+ggplot(more, aes(x = member_casual, y = number_of_rides, fill = member_casual))+ geom_col()+ labs(title = "count of riders on weekdays and weekends", x = "\n membership", y ="number of rides \n")+ facet_wrap(~type_of_week)+guides(fill =guide_legend(title = "Membership"))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 0),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"))
+```
+#finding the percentage of bike types, ride length, number of rides, average ride length and total ride length
+```{r}
+# finding the mmost popular biketypes 
+bike_type_month<-cyclic_data4 %>% group_by(rideable_type) %>%
+  summarise(
+    Minutes_total = sum(ride_length_minutes),
+    average_ride_time = mean(ride_length_minutes),
+    number_of_rides = n()) %>% ungroup %>%  
+  mutate(total= sum(number_of_rides),
+         percentage = (number_of_rides/total) *100)
+print(bike_type_month)
+
+#
+```
+
+# Finding  the most start stations
+```{r}
+# finding the top stations(i.e start and end stations)
+length(unique(cyclic_data4$start_station_name))
+length(unique(cyclic_data4$start_station_id))
+
+
+# finding the most busiest stations per memberships
+bike_stations<-cyclic_data4 %>% group_by(start_station_name) %>%
+  summarise(
+    Minutes_total = sum(ride_length_minutes),
+    average_ride_length = mean(ride_length_minutes),
+   number_of_rides = n()
+  ) %>% ungroup() %>% arrange(desc(number_of_rides))
+
+#selecting the top 10 rides
+
+top_stations<-head(bike_stations, n= 10)
+print(top_stations)
+```
+
+# finding the coordinates of the top stations to be represented in tableau
+```{r}
+#finding their appropriate coordinates to be represented in tableau by merging cyclic_data4 and topstations
+
+popular_stations<-left_join(top_stations,cyclic_data4,by = "start_station_name") %>% arrange(desc(number_of_rides)) %>% group_by(start_station_name) %>% distinct(start_station_name, .keep_all = TRUE)
+
+print(popular_stations)
+
+# saving 
+# write_csv(popular_stations,"./popular_stations.csv")
+```
+
+
+# finding the most prefered routes
+```{r}
+
+cyclic_data4$routes<- paste(cyclic_data4$start_station_name,"to", cyclic_data4$end_station_name)
+
+length(unique(cyclic_data4$routes))
+
+#showing the top routes
+top_routes<-cyclic_data4 %>%group_by(routes) %>% summarise(
+  Minutes_total = sum(ride_length_minutes),
+  average_ride_length = mean(ride_length_minutes),
+  number_of_rides =n()) %>% arrange(desc(number_of_rides)) %>% ungroup()
+
+head(top_routes,n =10)
+
+
+
+
+
+```
+
+
+# Act:
+
+## the data shows a smaller number of casual riders(44.02%) than members(55.98%).
+
+## casual riders are more active on weekend while members are more active during weekdays.
+
+## From the data it is observed that the period from june to september has the most number of active riders with casual members being the most active. since the main aim is to design a marketing campaign to convert casual members to active members, the campaign should focus on this period  
+
+## The marketing team should focus on the 10 top stations presented here. During this period and offer weekly and monthy membership schemes should be offered. 
+## Also reducing the membership fees a little might be a good marketing strategy to gain more active members. 
+
+## the marketing campaign could be advertising on popular social media platforms and streamin services like facebook, instagram, twitter, youtube, netflix, amazon prime.
+
+## Posters can be made in this period and posted at strategic venues like near train stations, popular shopping malls etc
+
+## the data also shows that the most popular bike type is classic bike with 64%%, followed by electric bikes with 30% and docked type with 5%
+
+## A recommendation is that further analysis needs to be carried out to investigate what causes the increase in the number of casual riders from June to august.  A possible reason might because it is summer and the weather is sunny. I suggest carrying out a correlation analysis. 
+
+
